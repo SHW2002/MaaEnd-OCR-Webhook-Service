@@ -1,0 +1,12 @@
+<Project>
+  <Target Name="ArchivePublishedApplication" AfterTargets="Publish">
+    <PropertyGroup>
+      <ReleaseArchiveDirectory>$(MSBuildProjectDirectory)\bin\Release-Archives</ReleaseArchiveDirectory>
+      <ReleaseArchiveTimestamp>$([System.DateTime]::Now.ToString('yyMMdd-HHmmss'))</ReleaseArchiveTimestamp>
+      <ReleaseArchivePath>$(ReleaseArchiveDirectory)\$(AssemblyName)-$(RuntimeIdentifier)-portable-$(ReleaseArchiveTimestamp).zip</ReleaseArchivePath>
+    </PropertyGroup>
+    <MakeDir Directories="$(ReleaseArchiveDirectory)" />
+    <ZipDirectory SourceDirectory="$(PublishDir)" DestinationFile="$(ReleaseArchivePath)" />
+    <Message Importance="high" Text="Release archive: $(ReleaseArchivePath)" />
+  </Target>
+</Project>

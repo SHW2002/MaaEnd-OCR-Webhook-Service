@@ -17,6 +17,8 @@ publish/
 
 # 截图输出
 screenshots/
+/datasets/
+/records/
 
 # 系统文件
 Thumbs.db

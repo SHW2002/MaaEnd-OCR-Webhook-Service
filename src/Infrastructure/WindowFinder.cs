@@ -30,7 +30,7 @@ internal static class WindowFinder
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    public static WindowInfo? FindWindow(string title, bool partialMatch)
+    public static WindowInfo? FindWindow(string title, bool partialMatch, bool caseSensitive = false)
     {
         var results = new List<(WindowInfo Window, bool ExactMatch)>();
 
@@ -47,7 +47,7 @@ internal static class WindowFinder
 
             if (GetWindow(hWnd, GW_OWNER) != IntPtr.Zero) return true;
 
-            var exactMatch = GetTitleMatch(windowTitle, title, partialMatch);
+            var exactMatch = GetTitleMatch(windowTitle, title, partialMatch, caseSensitive);
 
             if (exactMatch != null && GetWindowRect(hWnd, out var rect))
             {
@@ -72,20 +72,31 @@ internal static class WindowFinder
             .FirstOrDefault();
     }
 
-    private static bool? GetTitleMatch(string windowTitle, string title, bool partialMatch)
+    private static bool? GetTitleMatch(string windowTitle, string title, bool partialMatch, bool caseSensitive)
     {
-        if (windowTitle.Equals(title, StringComparison.OrdinalIgnoreCase))
+        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        if (windowTitle.Equals(title, comparison))
         {
             return true;
         }
 
         if ((partialMatch || title.Length < windowTitle.Length)
-            && windowTitle.Contains(title, StringComparison.OrdinalIgnoreCase))
+            && windowTitle.Contains(title, comparison))
         {
             return false;
         }
 
         return null;
+    }
+
+    public static void Refresh(WindowInfo window)
+    {
+        if (!GetWindowRect(window.Handle, out var rect))
+            throw new InvalidOperationException("目标窗口已关闭，无法获取窗口尺寸");
+        window.Rect = rect;
+        var title = new StringBuilder(Math.Max(1, GetWindowTextLength(window.Handle) + 1));
+        GetWindowText(window.Handle, title, title.Capacity);
+        window.Title = title.ToString();
     }
 
     [StructLayout(LayoutKind.Sequential)]

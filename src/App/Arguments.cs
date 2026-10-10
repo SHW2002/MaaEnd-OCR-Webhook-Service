@@ -1,11 +1,14 @@
+using System.Text.Json.Serialization;
+
 namespace MaaEnd_Log_Retransmitter.App;
 
 internal sealed class Arguments
 {
-    public string WindowTitle { get; set; } = "";
+    public const string DefaultWindowTitle = "MaaEnd v";
+    public string WindowTitle { get; set; } = DefaultWindowTitle;
+    public bool WindowTitleCaseSensitive { get; set; }
     public string SearchText { get; set; } = "";
     public bool PartialMatch { get; set; }
-    public bool SaveScreenshot { get; set; }
     public int Retry { get; set; } = 1;
     public int RetryInterval { get; set; } = 1000;
     public int RollingIntervalMs { get; set; } = 3000;
@@ -22,10 +25,11 @@ internal sealed class Arguments
     private const string SummaryWebhookMode = "Summary";
     private const string AllWebhookMode = "All";
 
-    public bool ShouldPushRealtime => WebhookMode == RealtimeWebhookMode || WebhookMode == AllWebhookMode;
-    public bool ShouldPushSummary => WebhookMode == SummaryWebhookMode || WebhookMode == AllWebhookMode;
+    [JsonIgnore] public bool ShouldPushRealtime => WebhookMode == RealtimeWebhookMode || WebhookMode == AllWebhookMode;
+    [JsonIgnore] public bool ShouldPushSummary => WebhookMode == SummaryWebhookMode || WebhookMode == AllWebhookMode;
+    [JsonIgnore] public bool HasWebhookUrl => IsValidHttpUrl(WebhookUrl);
 
-    public string WebhookModeDisplay => WebhookMode switch
+    [JsonIgnore] public string WebhookModeDisplay => WebhookMode switch
     {
         RealtimeWebhookMode => "仅实时",
         SummaryWebhookMode => "仅总结",
@@ -39,8 +43,11 @@ internal sealed class Arguments
     }
 
     public bool TryValidate(out List<string> errors)
+        => TryValidate(allowEmptyWebhook: false, out errors);
+
+    public bool TryValidate(bool allowEmptyWebhook, out List<string> errors)
     {
-        var invalidFields = GetInvalidFields();
+        var invalidFields = GetInvalidFields(allowEmptyWebhook);
         errors = invalidFields.Select(GetValidationMessage).ToList();
 
         if (errors.Count == 0 && TryNormalizeWebhookMode(WebhookMode, out var webhookMode))
@@ -52,6 +59,9 @@ internal sealed class Arguments
     }
 
     public IReadOnlyList<string> GetInvalidFields()
+        => GetInvalidFields(allowEmptyWebhook: false);
+
+    public IReadOnlyList<string> GetInvalidFields(bool allowEmptyWebhook)
     {
         var fields = new List<string>();
 
@@ -63,12 +73,17 @@ internal sealed class Arguments
         if (RetryInterval is < 100 or > 60000) fields.Add(nameof(RetryInterval));
         if (RollingIntervalMs is < 500 or > 60000) fields.Add(nameof(RollingIntervalMs));
 
-        if (string.IsNullOrWhiteSpace(WebhookUrl) || !IsValidHttpUrl(WebhookUrl)) fields.Add(nameof(WebhookUrl));
-        if (string.IsNullOrWhiteSpace(WebhookBody) || !WebhookBody.Contains("__CONTENT__", StringComparison.Ordinal)) fields.Add(nameof(WebhookBody));
-        if (string.IsNullOrWhiteSpace(WebhookContentType)) fields.Add(nameof(WebhookContentType));
-        if (WebhookTimeoutMs is < 1000 or > 60000) fields.Add(nameof(WebhookTimeoutMs));
-        if (WebhookPushCacheSeconds is < 0 or > 86400) fields.Add(nameof(WebhookPushCacheSeconds));
-        if (string.IsNullOrWhiteSpace(WebhookMode) || !TryNormalizeWebhookMode(WebhookMode, out _)) fields.Add(nameof(WebhookMode));
+        var webhookUrlIsEmpty = string.IsNullOrWhiteSpace(WebhookUrl);
+        var webhookDisabled = allowEmptyWebhook && webhookUrlIsEmpty;
+        if (!webhookDisabled)
+        {
+            if (webhookUrlIsEmpty || !IsValidHttpUrl(WebhookUrl)) fields.Add(nameof(WebhookUrl));
+            if (string.IsNullOrWhiteSpace(WebhookBody) || !WebhookBody.Contains("__CONTENT__", StringComparison.Ordinal)) fields.Add(nameof(WebhookBody));
+            if (string.IsNullOrWhiteSpace(WebhookContentType)) fields.Add(nameof(WebhookContentType));
+            if (WebhookTimeoutMs is < 1000 or > 60000) fields.Add(nameof(WebhookTimeoutMs));
+            if (WebhookPushCacheSeconds is < 0 or > 86400) fields.Add(nameof(WebhookPushCacheSeconds));
+            if (string.IsNullOrWhiteSpace(WebhookMode) || !TryNormalizeWebhookMode(WebhookMode, out _)) fields.Add(nameof(WebhookMode));
+        }
 
         return fields;
     }
@@ -90,7 +105,7 @@ internal sealed class Arguments
             nameof(WebhookPushCacheSeconds) => "WebhookPushCacheSeconds 必须在 0 到 86400 秒之间，0 表示不启用",
             nameof(WebhookMode) => "WebhookMode 必须是 Realtime、Summary 或 All",
             nameof(PartialMatch) => "PartialMatch 必须是布尔值",
-            nameof(SaveScreenshot) => "SaveScreenshot 必须是布尔值",
+            nameof(WindowTitleCaseSensitive) => "WindowTitleCaseSensitive 必须是布尔值",
             nameof(CaseSensitive) => "CaseSensitive 必须是布尔值",
             _ => $"{fieldName} 配置无效"
         };

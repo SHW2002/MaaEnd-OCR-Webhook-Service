@@ -1,21 +1,48 @@
-using System.Diagnostics;
 using System.Drawing;
+using System.Diagnostics;
+using MaaEnd_Log_Retransmitter.Infrastructure;
 
 namespace MaaEnd_Log_Retransmitter.Ocr;
 
 internal static class RollingOcrRecognizer
 {
-    public static int CandidateCount => 1;
+    private static readonly OcrCandidateSpec[] RollingSpecs =
+    [
+        new("detail", 8, OcrEngine.OcrPreprocessMode.DetailPreserving),
+        new("high-contrast", 8, OcrEngine.OcrPreprocessMode.HighContrastBinary)
+    ];
 
-    public static async Task<OcrRecognitionBatch> RecognizeRollingAsync(Bitmap bitmap,
-        string languageTag, bool saveDebugImages)
+    public static int CandidateCount => RollingSpecs.Length;
+
+    public static async Task<OcrRecognitionBatch> RecognizeRollingAsync(
+        Bitmap bitmap,
+        string languageTag,
+        bool saveDebugImages)
     {
-        // Preserve master's rolling OCR: one 8x detail-preserving candidate.
         var stopwatch = Stopwatch.StartNew();
-        var spec = new OcrCandidateSpec("detail", 8, OcrEngine.OcrPreprocessMode.DetailPreserving);
-        var result = await OcrEngine.RecognizeWithWordsAsync(bitmap, languageTag,
-            spec.Upscale, spec.PreprocessMode, saveDebugImages);
-        var candidate = new OcrCandidateResult(spec, result, null, stopwatch.ElapsedMilliseconds);
-        return new(candidate, [candidate], stopwatch.Elapsed.TotalMilliseconds);
+        var candidates = new List<OcrCandidateResult>(RollingSpecs.Length);
+        foreach (var spec in RollingSpecs)
+        {
+            var candidate = await OcrCandidateRunner.RunAsync(bitmap, languageTag, spec, saveDebugImages);
+            candidates.Add(candidate);
+            Logger.Debug(
+                $"滚动 OCR 候选 {candidate.Spec.Name}: score={candidate.Score!.Value}, {candidate.Score!.Reason}, elapsed={candidate.ElapsedMilliseconds}ms, chars={candidate.Result.Text.Length}");
+            foreach (var detail in candidate.Score!.Details)
+            {
+                Logger.Debug($"滚动 OCR 候选 {candidate.Spec.Name} 评分: {detail}");
+            }
+        }
+
+        var accepted = candidates
+            .OrderByDescending(candidate => candidate.Score!.Value)
+            .ThenBy(candidate => candidate.ElapsedMilliseconds)
+            .First();
+        var rejected = candidates
+            .Where(candidate => !ReferenceEquals(candidate, accepted))
+            .Select(candidate => $"{candidate.Spec.Name}=score {candidate.Score!.Value}, elapsed {candidate.ElapsedMilliseconds}ms");
+
+        Logger.Debug($"滚动 OCR 采纳 {accepted.Spec.Name}: score={accepted.Score!.Value}, elapsed={accepted.ElapsedMilliseconds}ms; 未采纳: {string.Join("; ", rejected)}");
+        Logger.Debug("滚动 OCR 采纳标准: 分数最高优先，分数相同选择耗时更短的候选");
+        return new OcrRecognitionBatch(accepted, candidates, stopwatch.Elapsed.TotalMilliseconds);
     }
 }

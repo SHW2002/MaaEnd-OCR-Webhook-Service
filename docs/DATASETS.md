@@ -59,7 +59,7 @@ Select **事件真值** to annotate every expected event with its timestamp, con
 
 ## Shared pipeline and replay modes
 
-**开始评估** runs only the current branch's production algorithm. Master retains its original rolling OCR: one 8× candidate with color contrast and sharpening. Production and evaluation share the `RollingOcrRecognizer` entry point. A single candidate has no heuristic score; its report score is `null`.
+**开始评估** runs only the current branch's production algorithm. This branch recognizes two 8× candidates: detail-preserving color contrast/sharpening and high-contrast binarization. It selects the complete result with the highest heuristic score, breaking ties by shorter recognition duration. Production and evaluation share the `RollingOcrRecognizer` entry point; reports include both candidates and their scores. Master uses the original single detail-preserving candidate.
 
 Evaluation and live recognition share `FrameRecognitionPipeline` for full-window anchor detection (4× high contrast), cropping, the OCR engine, tiling, line reconstruction, timestamp/content parsing, and `RollingOcrOutputFilter` cleanup, rejection, and temporal deduplication. Evaluation substitutes recorded frames for window input and local reports for delivery; it sends no Webhook requests.
 
